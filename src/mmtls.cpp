@@ -127,7 +127,7 @@ int MMTLSClient::HandShake(const std::string& host) {
         rc = -1;
         goto wrapup;
     }
-    if (session != nullptr)
+    if (session != nullptr && session->tk.tickets.size() > 1)
     {
         ch = clientHello::newPskOneHello(publicEcdh, verifyEcdh, session->tk.tickets[1]);
     }
