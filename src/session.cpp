@@ -18,10 +18,8 @@ bool Session::Save(const std::string& path) {
 	byteArray buf;
 	writeU16LenData(buf, pskAccess);
 	writeU16LenData(buf, pskRefresh);
-	auto ticketBytes = tk.serialize();
-	for (size_t i = 0; i < ticketBytes.size(); i++) {
-		buf.push_back(ticketBytes[i]);
-	}
+	byteArray ticketBytes = tk.serialize();
+	buf.insert(buf.end(), ticketBytes.begin(), ticketBytes.end());
 	ofs.write((char*)buf.data(), buf.size());
 	ofs.close();
 	return true;
@@ -51,4 +49,3 @@ int Session::loadSession(const std::string& path, Session& s) {
 	s.tk = readNewSessionTicket(ticketBytes, err);
 	return err;
 }
-

@@ -27,5 +27,5 @@ public:
 	byteArray Export();
 };
 
-sessionTicket readSessionTicket(byteArray buf, int& err);
-newSessionTicket readNewSessionTicket(byteArray buf, int& err);
+sessionTicket readSessionTicket(const byteArray& buf, int& err);
+newSessionTicket readNewSessionTicket(const byteArray& buf, int& err);

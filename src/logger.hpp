@@ -15,7 +15,7 @@
 #include <thread>
 #include <mutex>
 
-constexpr unsigned MAX_LOG_SIZE = 8192;
+constexpr unsigned MAX_LOG_SIZE = 0xffff;
 
 inline void LOG(const char* level, const char* file, const char* function, int line, const char* _Format, ...) {
 	static std::mutex mtx;
@@ -57,12 +57,16 @@ inline void LOG(const char* level, const char* file, const char* function, int l
 	va_end(args);
 	std::string msg(msg_buf.get());
 	memset(msg_buf.get(), 0, MAX_LOG_SIZE);
-	const char* log_format = "%s|%s|%d|%s[line:%d] - %s : %s";
+#if defined(_WIN32)
+	const char* log_format = "%s|%s|%lu|%s[line:%d] - %s : %s";
+#else
+	const char* log_format = "%s|%s|%llu|%s[line:%d] - %s : %s";
+#endif
 	std::thread::id id = std::this_thread::get_id();
 #if defined(_WIN32)
 	sprintf_s(msg_buf.get(), MAX_LOG_SIZE, log_format, strTime, level, *(unsigned int*)&id, szFile.c_str(), line, function, msg.c_str());
 #else
-	snprintf(msg_buf.get(), MAX_LOG_SIZE, log_format, strTime, level, *(unsigned int*)&id, szFile.c_str(), line, function, msg.c_str());
+	snprintf(msg_buf.get(), MAX_LOG_SIZE, log_format, strTime, level, *(unsigned long long*)&id, szFile.c_str(), line, function, msg.c_str());
 #endif
 	std::string output(msg_buf.get());
 	mtx.lock();

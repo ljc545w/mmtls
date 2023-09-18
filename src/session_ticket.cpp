@@ -1,9 +1,9 @@
 #include "session_ticket.h"
 #include "utility.h"
 
-sessionTicket readSessionTicket(byteArray buf, int& err) {
+sessionTicket readSessionTicket(const byteArray& buf, int& err) {
 	sessionTicket t;
-	BYTE* pBuf = buf.data();
+	BYTE* pBuf = const_cast<byteArray&>(buf).data();
 	UINT32 length = 0;
 	t.ticketType = pBuf[0];
 	pBuf++;
@@ -20,9 +20,10 @@ sessionTicket readSessionTicket(byteArray buf, int& err) {
 	return t;
 }
 
-newSessionTicket readNewSessionTicket(byteArray buf, int& err) {
+newSessionTicket readNewSessionTicket(const byteArray& buf, int& err) {
 	newSessionTicket t;
-	BYTE* pBuf = buf.data();
+	BYTE* pBuf = const_cast<byteArray&>(buf).data();
+	BYTE* pEndBuf = const_cast<byteArray&>(buf).data() + buf.size();
 	UINT32 length = 0;
 	length = (pBuf[0] << 24) | (pBuf[1] << 16) | (pBuf[2] << 8) | (pBuf[3] << 0);
 	pBuf += 4;
@@ -33,6 +34,11 @@ newSessionTicket readNewSessionTicket(byteArray buf, int& err) {
 	for (BYTE i = 0; i < t.count; i++) {
 		length = (pBuf[0] << 24) | (pBuf[1] << 16) | (pBuf[2] << 8) | (pBuf[3] << 0);
 		pBuf += 4;
+		if (pBuf + length > pEndBuf)
+		{
+			err = -1;
+			break;
+		}
 		byteArray data(pBuf, pBuf + length);
 		pBuf += length;
 		auto ticket = readSessionTicket(data, err);
@@ -61,7 +67,7 @@ byteArray newSessionTicket::serialize() {
 	for (int i = 0; i < 4; i++)
 		result.push_back(0x0);
 	result.push_back(0x04);
-	result.push_back(0x02);
+	result.push_back(this->tickets.size() & 0xff);
 	for (auto& ticket : this->tickets) {
 		auto vBytes = ticket.serialize();
 		writeU32LenData(result, vBytes);

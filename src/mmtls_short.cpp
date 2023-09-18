@@ -213,15 +213,15 @@ int MMTLSClientShort::genDataPart(const std::string& host, const std::string& pa
 
 int MMTLSClientShort::buildRequestHeader(const std::string& host, int length, byteArray& resp) {
 	int rc = 0;
-	byteArray randArr = getRandom(4);
-	int randName = (randArr[0] << 24) | (randArr[1] << 16) | (randArr[2] << 8) | (randArr[3] << 0);
-	std::string _headerFormat = "POST /mmtls/%x HTTP/1.1\r\nHost: %s\r\nAccept: */*\r\nCache-Control: no-cache\r\nConnection: Keep-Alive\r\nContent-Length: %d\r\nContent-Type: application/octet-stream\r\nUpgrade: mmtls\r\nUser-Agent: MicroMessenger Client\r\n\r\n";
+	byteArray randArr = getRandom(2);
+	int randName = (0 << 24) | (0 << 16) | (randArr[0] << 8) | (randArr[1] << 0);
+	std::string _headerFormat = "POST /mmtls/%08x HTTP/1.1\r\nHost: %s\r\nAccept: */*\r\nCache-Control: no-cache\r\nConnection: Keep-Alive\r\nContent-Length: %d\r\nContent-Type: application/octet-stream\r\nUpgrade: mmtls\r\nUser-Agent: MicroMessenger Client\r\n\r\n";
 	size_t bLen = _headerFormat.length() + host.length() + 8 + 11;
 	char* buffer = new char[bLen]();
 #if defined(_WIN32)
-	sprintf_s(buffer, bLen, _headerFormat.c_str(), randName, host, length);
+	sprintf_s(buffer, bLen, _headerFormat.c_str(), randName, host.c_str(), length);
 #else
-	snprintf(buffer, bLen, _headerFormat.c_str(), randName, host, length);
+	snprintf(buffer, bLen, _headerFormat.c_str(), randName, host.c_str(), length);
 #endif
 	std::string szHeader(buffer);
 	delete[] buffer;
@@ -238,9 +238,9 @@ int MMTLSClientShort::parseResponse(SOCKET connection, byteArray& resp) {
 		rc = recv(connection, buf, sizeof(buf), 0);
 		if (rc < 0)
 			return rc;
-		result.insert(result.end(), buf, buf + rc);
-		if (rc < 1024)
+		if (rc == 0)
 			break;
+		result.insert(result.end(), buf, buf + rc);
 	}
 	// skip response header
 	std::string szResp(result.begin(), result.end());
