@@ -67,7 +67,7 @@ int MMTLSClientShort::Request(const std::string& host, const std::string& path, 
 		goto wrapup;
 	}
 	if (conn == NULL) {
-		// ´´½¨socket
+		// Â´Â´Â½Â¨socket
 		conn = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (conn == INVALID_SOCKET) {
 			rc = -1;
@@ -156,7 +156,7 @@ int MMTLSClientShort::packHttp(const std::string& host, const std::string& path,
 		0x00, 0x00, 0x00, 0x00
 	};
 	for (int i = 0; i < 4; i++) {
-		extensionsPart.push_back((hello.timestamp >> (24 - i * 8)) & 0xff);
+		extensionsPart[16LL + i] = (hello.timestamp >> (24 - i * 8)) & 0xff;
 	}
 	handshakeHasher->Write(extensionsPart);
 	mmtlsRecord extensionsRecord = mmtlsRecord::createSystemRecord(extensionsPart);
