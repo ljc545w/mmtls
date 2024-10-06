@@ -11,6 +11,7 @@
 #include <ctime>
 #endif
 
+#if OPENSSL_API_LEVEL < 30000
 clientHello clientHello::newECDHEHello(const EC_KEY* cliPubKey, const EC_KEY* cliVerKey) {
 	clientHello ch;
 	ch.protocolVersion = ProtocolVersion;
@@ -23,7 +24,7 @@ clientHello clientHello::newECDHEHello(const EC_KEY* cliPubKey, const EC_KEY* cl
 	OPENSSL_free(pointBuf);
 	pointBuf = nullptr;
 	bLen = EC_KEY_key2buf(cliVerKey, POINT_CONVERSION_UNCOMPRESSED, &pointBuf, nullptr);
-	std::vector<BYTE> verArr(pointBuf, pointBuf + bLen);
+	byteArray verArr(pointBuf, pointBuf + bLen);
 	OPENSSL_free(pointBuf);
 	pointBuf = nullptr;
 	ch.extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff] = { pubArr,verArr };
@@ -47,12 +48,49 @@ clientHello clientHello::newPskOneHello(const EC_KEY* cliPubKey, const EC_KEY* c
 	OPENSSL_free(pointBuf);
 	pointBuf = nullptr;
 	bLen = EC_KEY_key2buf(cliVerKey, POINT_CONVERSION_UNCOMPRESSED, &pointBuf, nullptr);
-	std::vector<BYTE> verArr(pointBuf, pointBuf + bLen);
+	byteArray verArr(pointBuf, pointBuf + bLen);
 	OPENSSL_free(pointBuf);
 	pointBuf = nullptr;
 	ch.extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff] = { pubArr,verArr };
 	return ch;
 }
+#else
+clientHello clientHello::newECDHEHello(const EVP_PKEY* cliPubKey, const EVP_PKEY* cliVerKey) {
+	clientHello ch;
+	ch.protocolVersion = ProtocolVersion;
+	ch.timestamp = (uint32)time(0);
+	ch.random = getRandom(32);
+	ch.cipherSuites.push_back(TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff);
+	std::string szCliPubKey, szCliVerKey;
+	EVP_EC_KEY_key2buf(cliPubKey, szCliPubKey);
+	byteArray pubArr(szCliPubKey.begin(), szCliPubKey.end());
+	EVP_EC_KEY_key2buf(cliVerKey, szCliVerKey);
+	byteArray verArr(szCliVerKey.begin(), szCliVerKey.end());
+	ch.extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff] = { pubArr,verArr };
+	return ch;
+}
+
+clientHello clientHello::newPskOneHello(const EVP_PKEY* cliPubKey, const EVP_PKEY* cliVerKey, sessionTicket& ticket) {
+	clientHello ch;
+	ch.protocolVersion = ProtocolVersion;
+	ch.timestamp = (uint32)time(0);
+	ch.random = getRandom(32);
+	ch.cipherSuites.push_back(TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff);
+	ch.cipherSuites.push_back(TLS_PSK_WITH_AES_128_GCM_SHA256);
+	sessionTicket& t = ticket;
+	t.ticketAgeAdd = byteArray();
+	byteArray ticketData = t.serialize();
+	ch.extensions[TLS_PSK_WITH_AES_128_GCM_SHA256] = { ticketData };
+	std::string szCliPubKey, szCliVerKey;
+	EVP_EC_KEY_key2buf(cliPubKey, szCliPubKey);
+	byteArray pubArr(szCliPubKey.begin(), szCliPubKey.end());
+	EVP_EC_KEY_key2buf(cliVerKey, szCliVerKey);
+	byteArray verArr(szCliVerKey.begin(), szCliVerKey.end());
+	ch.extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff] = { pubArr,verArr };
+	return ch;
+}
+#endif
+
 clientHello clientHello::newPskZeroHello(sessionTicket& ticket) {
 	clientHello ch;
 	ch.protocolVersion = ProtocolVersion;

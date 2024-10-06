@@ -21,8 +21,14 @@ constexpr uint32 TCP_NoopResponse = 0x3B9ACA06;
 constexpr int ServerEcdhCurve = NID_X9_62_prime256v1;
 constexpr char ServerEcdhX[] = "1da177b6a5ed34dabb3f2b047697ca8bbeb78c68389ced43317a298d77316d54";
 constexpr char ServerEcdhY[] = "4175c032bc573d5ce4b3ac0b7f2b9a8d48ca4b990ce2fa3ce75cc9d12720fa35";
+#if OPENSSL_API_LEVEL < 30000
 extern EC_GROUP* curve;
 extern EC_KEY* ServerEcdh;
+#else
+extern EC_GROUP* curve;
+extern const char* curveName;
+extern EVP_PKEY* ServerEcdh;
+#endif
 
 inline std::string bytesFromHex(const std::string& _Src) {
 	std::string _Out;

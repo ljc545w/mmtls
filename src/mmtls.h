@@ -20,9 +20,15 @@ void UnInitServerEcdh();
 struct MMTLSClientTag {
 	SOCKET conn = NULL;
 	std::atomic<INT32> status = 0;
+#if OPENSSL_API_LEVEL < 30000
 	EC_KEY* publicEcdh = nullptr;
 	EC_KEY* verifyEcdh = nullptr;
 	EC_KEY* serverEcdh = nullptr;
+#else
+	EVP_PKEY* publicEcdh = nullptr;
+	EVP_PKEY* verifyEcdh = nullptr;
+	EVP_PKEY* serverEcdh = nullptr;
+#endif
 	HandshakeHasher* handshakeHasher = nullptr;
 	UINT32 serverSeqNum = 0;
 	UINT32 clientSeqNum = 0;

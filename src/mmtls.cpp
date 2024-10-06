@@ -24,10 +24,17 @@
 #include<netdb.h>
 #endif
 
+#if OPENSSL_API_LEVEL < 30000
 EC_KEY* ServerEcdh = nullptr;
 EC_GROUP* curve = nullptr;
+#else
+EVP_PKEY* ServerEcdh = nullptr;
+EC_GROUP* curve = nullptr;
+const char* curveName = "P-256";
+#endif
 
 void InitServerEcdh() {
+#if OPENSSL_API_LEVEL < 30000
     if (ServerEcdh)
         return;
     if(curve == nullptr)
@@ -40,9 +47,26 @@ void InitServerEcdh() {
     data.insert(data.end(), y.begin(), y.end());
     if (EC_KEY_oct2key(ec_key, data.data(), data.size(), nullptr))
         ServerEcdh = ec_key;
+#else
+    if (ServerEcdh)
+        return;
+    if (curve == nullptr)
+        curve = EC_GROUP_new_by_curve_name(ServerEcdhCurve);
+    EVP_PKEY* evp_key = EVP_PKEY_new();
+    byteArray data(1, POINT_CONVERSION_UNCOMPRESSED);
+    std::string x = bytesFromHex(ServerEcdhX);
+    std::string y = bytesFromHex(ServerEcdhY);
+    data.insert(data.end(), x.begin(), x.end());
+    data.insert(data.end(), y.begin(), y.end());
+    if (EVP_EC_KEY_oct2key(evp_key, data.data(), data.size()))
+        ServerEcdh = evp_key;
+    else
+        EVP_PKEY_free(evp_key);
+#endif
 }
 
 void UnInitServerEcdh() {
+#if OPENSSL_API_LEVEL < 30000
     if (!ServerEcdh)
         return;
     EC_KEY_free(ServerEcdh);
@@ -52,6 +76,12 @@ void UnInitServerEcdh() {
         EC_GROUP_free(curve);
         curve = nullptr;
     }
+#else
+    if (!ServerEcdh)
+        return;
+    EVP_PKEY_free(ServerEcdh);
+    ServerEcdh = nullptr;
+#endif
 }
 
 static byteArray hkdfExpand(const EVP_MD* hasher, const byteArray& preudorandomKey, const byteArray& info, int length)
@@ -74,12 +104,21 @@ MMTLSClient::MMTLSClient() {
 }
 
 MMTLSClient::~MMTLSClient() {
+#if OPENSSL_API_LEVEL < 30000
     if (publicEcdh)
         EC_KEY_free(publicEcdh);
     if (verifyEcdh)
         EC_KEY_free(verifyEcdh);
     if (serverEcdh)
         EC_KEY_free(serverEcdh);
+#else
+    if (publicEcdh)
+        EVP_PKEY_free(publicEcdh);
+    if (verifyEcdh)
+        EVP_PKEY_free(verifyEcdh);
+    if (serverEcdh)
+        EVP_PKEY_free(serverEcdh);
+#endif
     if (handshakeHasher)
         delete handshakeHasher;
     if (m_bIsNewSession && session)
@@ -95,8 +134,13 @@ int MMTLSClient::HandShake(const std::string& host) {
     const std::string ip = getHostByName(host);
     clientHello ch;
     serverHello sh;
+#if OPENSSL_API_LEVEL < 30000
     const EC_POINT* serverPublicKey = nullptr;
     const BIGNUM* publicEcdhPrivateKey = nullptr;
+#else
+    EC_POINT* serverPublicKey = nullptr;
+    BIGNUM* publicEcdhPrivateKey = nullptr;
+#endif
     byteArray comKey, expandedSecret;
     trafficKeyPair trafficKey, appKey;
     if (conn == NULL) {
@@ -144,8 +188,19 @@ int MMTLSClient::HandShake(const std::string& host) {
         goto wrapup;
     }
     // DH compute key
+#if OPENSSL_API_LEVEL < 30000
     serverPublicKey = EC_KEY_get0_public_key(sh.publicKey);
     publicEcdhPrivateKey = EC_KEY_get0_private_key(publicEcdh);
+#else
+    if (!EVP_EC_KEY_get0_public_key(curve, sh.publicKey, &serverPublicKey)) {
+        rc = -1;
+        goto wrapup;
+    }
+    if (!EVP_EC_KEY_get0_private_key(publicEcdh, &publicEcdhPrivateKey)) {
+        rc = -1;
+        goto wrapup;
+    }
+#endif
     comKey = computeEphemeralSecret(serverPublicKey, publicEcdhPrivateKey);
     // trafffic key
     if (computeTrafficKey(comKey, hkdfExpand("handshake key expansion", handshakeHasher), trafficKey) < 0)
@@ -187,6 +242,12 @@ int MMTLSClient::HandShake(const std::string& host) {
     // fully complete handshake
     status.store(1);
 wrapup:
+#if OPENSSL_API_LEVEL >= 30000
+    if (serverPublicKey)
+        EC_POINT_free(serverPublicKey);
+    if (publicEcdhPrivateKey)
+        BN_free(publicEcdhPrivateKey);
+#endif
     LL_INFO("Long link handshake end!!!!error_code: %d", rc);
     return rc;
 }
@@ -406,12 +467,18 @@ byteArray MMTLSClient::computeEphemeralSecret(const EC_POINT* serverPublicKey, c
     BIGNUM * x = BN_new(), * y = BN_new();
     rc = EC_POINT_get_affine_coordinates(curve, point, x, y, nullptr);
     BYTE serialized[32] = { 0 };
-    rc = BN_bn2bin(x, serialized);
+    int sLen = BN_bn2bin(x, serialized);
     BN_free(x); BN_free(y); EC_POINT_free(point);
+#if OPENSSL_API_LEVEL < 30000
     SHA256_CTX sha256;
     rc = SHA256_Init(&sha256);
     rc = SHA256_Update(&sha256, serialized, sizeof(serialized));
     rc = SHA256_Final(result.data(), &sha256);
+#else
+    // std::cout << toHexString(std::string((char*)serialized, sLen)) << std::endl;
+    SHA256(serialized, sLen, result.data());
+    // std::cout << toHexString(std::string(result.begin(), result.end())) << std::endl;
+#endif
     return result;
 }
 
@@ -437,12 +504,21 @@ bool MMTLSClient::verifyEcdsa(const byteArray& data) {
     rc = handshakeHasher->Sum(digest);
     if (rc < 0)
         return false;
+#if OPENSSL_API_LEVEL < 30000
     byteArray dataHash(SHA256_DIGEST_LENGTH, 0);
     SHA256_CTX sha256;
     rc = SHA256_Init(&sha256);
     rc = SHA256_Update(&sha256, digest.data(), digest.size());
     rc = SHA256_Final(dataHash.data(), &sha256);
     bVerify = ECDSA_verify(0, dataHash.data(), (int)dataHash.size(), data.data(), (int)data.size(), ServerEcdh);
+#else
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    rc = EVP_DigestVerifyInit(mdctx, nullptr, EVP_sha256(), nullptr, ServerEcdh);
+    rc = EVP_DigestVerifyUpdate(mdctx, digest.data(), digest.size());
+    rc = EVP_DigestVerifyFinal(mdctx, data.data(), data.size());
+    bVerify = (rc == 1);
+    EVP_MD_CTX_free(mdctx);
+#endif
     return bVerify;
 }
 
@@ -459,20 +535,27 @@ byteArray MMTLSClient::hkdfExpand(const std::string& prefix, HandshakeHasher* co
 
 byteArray MMTLSClient::hmac(const byteArray& k, const byteArray& d) {
     byteArray result(SHA256_DIGEST_LENGTH, 0);
+#if OPENSSL_API_LEVEL < 30000
     HMAC_CTX* ctx = HMAC_CTX_new();
     unsigned outlen = 0, ret = 0;
     ret = HMAC_Init_ex(ctx, k.data(), (unsigned)k.size(), EVP_sha256(), NULL);
     ret = HMAC_Update(ctx, d.data(), d.size());
     ret = HMAC_Final(ctx, result.data(), &outlen);
     HMAC_CTX_free(ctx);
+#else
+    unsigned int dLen = 0;
+    HMAC(EVP_sha256(), k.data(), (int)k.size(), d.data(), d.size(), result.data(), &dLen);
+    byteArray digest(result.begin(), result.begin() + dLen);
+    result = std::move(digest);
+#endif
     return result;
 }
 
 
 int MMTLSClient::genKeyPairs() {
     int Ret = 0;
-    EC_KEY* ec_key = NULL;      //椭圆曲线的参数、私钥和公钥都保存在这个结构中。
-    // curve in py: NIST256p
+#if OPENSSL_API_LEVEL < 30000
+    EC_KEY* ec_key = NULL;
     ec_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
     if (!ec_key)
     {
@@ -480,11 +563,11 @@ int MMTLSClient::genKeyPairs() {
         return Ret;
     }
     Ret = EC_KEY_generate_key(ec_key);
-    publicEcdh = ec_key;
     if (!Ret) {
         Ret = -1;
         return Ret;
     }
+    publicEcdh = ec_key;
     ec_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
     if (!ec_key)
     {
@@ -497,5 +580,22 @@ int MMTLSClient::genKeyPairs() {
         return Ret;
     }
     verifyEcdh = ec_key;
+#else
+    EVP_PKEY* evp_key = NULL;
+    evp_key = EVP_EC_gen(curveName);
+    if (!evp_key)
+    {
+        Ret = -1;
+        return Ret;
+    }
+    publicEcdh = evp_key;
+    evp_key = EVP_EC_gen(curveName);
+    if (!evp_key)
+    {
+        Ret = -1;
+        return Ret;
+    }
+    verifyEcdh = evp_key;
+#endif
     return Ret;
 }

@@ -345,11 +345,18 @@ byteArray MMTLSClientShort::hkdfExpand(const std::string& prefix, const Handshak
 
 byteArray MMTLSClientShort::hmac(const byteArray& k, const byteArray& d) {
 	byteArray result(SHA256_DIGEST_LENGTH, 0);
+#if OPENSSL_API_LEVEL < 30000
 	HMAC_CTX* ctx = HMAC_CTX_new();
 	unsigned outlen = 0, ret = 0;
 	ret = HMAC_Init_ex(ctx, k.data(), (unsigned)k.size(), EVP_sha256(), NULL);
 	ret = HMAC_Update(ctx, d.data(), d.size());
 	ret = HMAC_Final(ctx, result.data(), &outlen);
 	HMAC_CTX_free(ctx);
+#else
+	unsigned int dLen = 0;
+	HMAC(EVP_sha256(), k.data(), (int)k.size(), d.data(), d.size(), result.data(), &dLen);
+	byteArray digest(result.begin(), result.begin() + dLen);
+	result = std::move(digest);
+#endif
 	return result;
 }
