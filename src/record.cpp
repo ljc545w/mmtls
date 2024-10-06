@@ -1,9 +1,8 @@
 #include "record.h"
 #include "utility.h"
 #include "const.h"
+#include "mmtls_openssl.h"
 #include <algorithm>
-#include <openssl/aes.h>
-#include <openssl/evp.h>
 
 byteArray dataRecord::serialize() {
 	byteArray result;

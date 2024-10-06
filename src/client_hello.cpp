@@ -1,8 +1,7 @@
 #include "client_hello.h"
 #include "const.h"
 #include "utility.h"
-#include <openssl/tls1.h>
-#include <openssl/ecdsa.h>
+
 #if defined(_WIN32)
 #include <string>
 #pragma warning(disable: 26451)
@@ -11,7 +10,7 @@
 #include <ctime>
 #endif
 
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
 clientHello clientHello::newECDHEHello(const EC_KEY* cliPubKey, const EC_KEY* cliVerKey) {
 	clientHello ch;
 	ch.protocolVersion = ProtocolVersion;

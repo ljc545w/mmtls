@@ -41,6 +41,7 @@
     <ClInclude Include="..\src\handshakeHasher.h" />
     <ClInclude Include="..\src\logger.hpp" />
     <ClInclude Include="..\src\mmtls.h" />
+    <ClInclude Include="..\src\mmtls_openssl.h" />
     <ClInclude Include="..\src\mmtls_short.h" />
     <ClInclude Include="..\src\record.h" />
     <ClInclude Include="..\src\server_finish.h" />
@@ -110,6 +111,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>D:\Program Files\OpenSSL-Win64-3.0\include;../src;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)</TargetName>
+    <OutDir>$(SolutionDir)Bin\$(Platform)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <TargetName>mmtls</TargetName>
@@ -151,6 +153,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

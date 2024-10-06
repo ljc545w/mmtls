@@ -1,19 +1,18 @@
 #pragma once
+#include <iostream>
+#include <chrono>
+#include <thread>
+#include <mutex>
+
 #if defined(_WIN32)
 #include <windows.h>
 #else
-#include <iostream>
 #include <memory>
 #include <cstring>
 #include <time.h>
 #include <stdarg.h>
 #include <ctime>
 #endif
-
-#include <iostream>
-#include <chrono>
-#include <thread>
-#include <mutex>
 
 constexpr unsigned MAX_LOG_SIZE = 0xffff;
 

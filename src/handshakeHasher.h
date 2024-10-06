@@ -1,7 +1,6 @@
 #pragma once
 #include "custom_defs.h"
-#include <openssl/ec.h>
-#include <openssl/evp.h>
+#include "mmtls_openssl.h"
 
 class HandshakeHasher {
 public:

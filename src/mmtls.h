@@ -5,8 +5,7 @@
 #include "server_hello.h"
 #include "record.h"
 #include "handshakeHasher.h"
-#include <openssl/ecdsa.h>
-#include <openssl/evp.h>
+#include "mmtls_openssl.h"
 #if defined(_WIN32)
 #include <ws2tcpip.h>
 #else
@@ -20,7 +19,7 @@ void UnInitServerEcdh();
 struct MMTLSClientTag {
 	SOCKET conn = NULL;
 	std::atomic<INT32> status = 0;
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
 	EC_KEY* publicEcdh = nullptr;
 	EC_KEY* verifyEcdh = nullptr;
 	EC_KEY* serverEcdh = nullptr;

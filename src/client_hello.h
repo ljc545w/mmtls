@@ -1,7 +1,7 @@
 #pragma once
 #include "custom_defs.h"
 #include "session_ticket.h"
-#include <openssl/ecdsa.h>
+#include "mmtls_openssl.h"
 
 struct clientHelloTag {
 	uint16 protocolVersion = 0;
@@ -13,7 +13,7 @@ struct clientHelloTag {
 
 class clientHello : public clientHelloTag {
 public:
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
 	static clientHello newECDHEHello(const EC_KEY* cliPubKey, const EC_KEY* cliVerKey);
 	static clientHello newPskOneHello(const EC_KEY* cliPubKey, const EC_KEY* cliVerKey, sessionTicket& ticket);
 #else

@@ -92,7 +92,7 @@ const std::string getHostByName(const std::string& hostName) {
 	return host;
 }
 
-#if OPENSSL_API_LEVEL >= 30000
+#if defined(OPENSSL3)
 int EVP_EC_KEY_oct2key(EVP_PKEY* key, const unsigned char* buf, size_t len) {
 	int rc = 0;
 	EVP_PKEY_CTX* pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
@@ -137,6 +137,7 @@ int EVP_EC_KEY_key2buf(const EVP_PKEY* key, std::string& outData) {
 
 int EVP_EC_KEY_get0_public_key(const EC_GROUP* curve, const EVP_PKEY* key, EC_POINT** ppEcPoint) {
 	int rc = 0;
+#if 0 // 使用枚举效率较低，并且枚举出的私钥可能无法转换为正确的BIGNUM
 	OSSL_PARAM* ossl_params = nullptr;
 	std::string szKeyBuf;
 	rc = EVP_PKEY_todata(key, EVP_PKEY_KEYPAIR, &ossl_params);
@@ -161,38 +162,25 @@ int EVP_EC_KEY_get0_public_key(const EC_GROUP* curve, const EVP_PKEY* key, EC_PO
 		*ppEcPoint = pEcPoint;
 	else
 		EC_POINT_free(pEcPoint);
+#else
+	unsigned char buff[0x100] = { 0 };
+	size_t sLen = 0;
+	rc = EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, buff, sizeof(buff), &sLen);
+	EC_POINT* pEcPoint = EC_POINT_new(curve);
+	rc = EC_POINT_oct2point(curve, pEcPoint, buff, sLen, NULL);
+	if (rc)
+		*ppEcPoint = pEcPoint;
+	else
+		EC_POINT_free(pEcPoint);
+#endif
 	return rc;
 }
 
 int EVP_EC_KEY_get0_private_key(const EVP_PKEY* key, BIGNUM** ppBigNum) {
 	int rc = 0;
-	OSSL_PARAM* ossl_params = nullptr;
-	std::string szKeyBuf;
-	rc = EVP_PKEY_todata(key, EVP_PKEY_KEYPAIR, &ossl_params);
-	if (!rc)
-		return rc;
-	rc = 0;
-	OSSL_PARAM* p_cur = ossl_params;
-	while (p_cur->data) {
-		std::string szKey(p_cur->key);
-		if (szKey == OSSL_PKEY_PARAM_PRIV_KEY) {
-			szKeyBuf = std::string((char*)p_cur->data, p_cur->data_size);
-			rc = 1;
-			break;
-		}
-		p_cur += 1;
-	}
-	if (!rc)
-		return rc;
-	BIGNUM* pBigNum = BN_new();
-	if (BN_bin2bn((unsigned char*)szKeyBuf.data(), (int)szKeyBuf.size(), pBigNum) == nullptr) {
-		rc = 0;
-		BN_free(pBigNum);
-	}
-	else {
-		rc = 1;
-		*ppBigNum = pBigNum;
-	}
+	BIGNUM* pBigNum = nullptr;
+	rc = EVP_PKEY_get_bn_param(key, OSSL_PKEY_PARAM_PRIV_KEY, &pBigNum);
+	*ppBigNum = pBigNum;
 	return rc;
 }
 #endif

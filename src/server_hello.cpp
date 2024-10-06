@@ -34,7 +34,7 @@ serverHello serverHello::readServerHello(const byteArray& buf, int& err) {
 	lBuf += 2;
 	byteArray ecPoint(lBuf, lBuf + keyLen);
 	lBuf += keyLen;
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
 	hello.publicKey = EC_KEY_new_by_curve_name(ServerEcdhCurve);
 	int rc = EC_KEY_oct2key(hello.publicKey, ecPoint.data(), ecPoint.size(), nullptr);
 #else

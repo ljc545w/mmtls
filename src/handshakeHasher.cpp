@@ -1,4 +1,5 @@
 #include "handshakeHasher.h"
+#include "const.h"
 
 int HandshakeHasher::Sum(byteArray& digest, const byteArray& extraInfo) {
 	if(extraInfo.size() > 0)

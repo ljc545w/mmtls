@@ -6,3 +6,4 @@
 windows/Bin
 windows/x64
 windows/mmtls
+**/session

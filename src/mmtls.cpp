@@ -1,12 +1,5 @@
 #include "mmtls.h"
 #include "utility.h"
-#include <openssl/ecdsa.h>
-#include <openssl/ecdh.h>
-#include <openssl/kdf.h>
-#include <openssl/evp.h>
-#include <openssl/obj_mac.h>
-#include <openssl/sha.h>
-#include <openssl/hmac.h>
 #include <algorithm>
 #include "signature.h"
 #include "server_finish.h"
@@ -24,7 +17,7 @@
 #include<netdb.h>
 #endif
 
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
 EC_KEY* ServerEcdh = nullptr;
 EC_GROUP* curve = nullptr;
 #else
@@ -34,7 +27,7 @@ const char* curveName = "P-256";
 #endif
 
 void InitServerEcdh() {
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     if (ServerEcdh)
         return;
     if(curve == nullptr)
@@ -66,7 +59,7 @@ void InitServerEcdh() {
 }
 
 void UnInitServerEcdh() {
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     if (!ServerEcdh)
         return;
     EC_KEY_free(ServerEcdh);
@@ -104,7 +97,7 @@ MMTLSClient::MMTLSClient() {
 }
 
 MMTLSClient::~MMTLSClient() {
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     if (publicEcdh)
         EC_KEY_free(publicEcdh);
     if (verifyEcdh)
@@ -134,7 +127,7 @@ int MMTLSClient::HandShake(const std::string& host) {
     const std::string ip = getHostByName(host);
     clientHello ch;
     serverHello sh;
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     const EC_POINT* serverPublicKey = nullptr;
     const BIGNUM* publicEcdhPrivateKey = nullptr;
 #else
@@ -188,7 +181,7 @@ int MMTLSClient::HandShake(const std::string& host) {
         goto wrapup;
     }
     // DH compute key
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     serverPublicKey = EC_KEY_get0_public_key(sh.publicKey);
     publicEcdhPrivateKey = EC_KEY_get0_private_key(publicEcdh);
 #else
@@ -242,7 +235,7 @@ int MMTLSClient::HandShake(const std::string& host) {
     // fully complete handshake
     status.store(1);
 wrapup:
-#if OPENSSL_API_LEVEL >= 30000
+#ifdef OPENSSL3
     if (serverPublicKey)
         EC_POINT_free(serverPublicKey);
     if (publicEcdhPrivateKey)
@@ -422,9 +415,6 @@ int MMTLSClient::readNoop() {
     rc = readRecord(record);
     if (rc < 0)
         return rc;
-    rc = record.decrypt(session->appKey, serverSeqNum);
-    if (rc < 0)
-        return rc;
     BYTE* pBuf = record.data.data();
     uint32 packLen = (pBuf[0] << 24) | (pBuf[1] << 16) | (pBuf[2] << 8) | (pBuf[3] << 0);
     pBuf += 4;
@@ -437,7 +427,6 @@ int MMTLSClient::readNoop() {
     if (dataType != TCP_NoopResponse)
         return -1;
     LL_INFO(toHexString(std::string(record.data.begin(), record.data.end())).c_str());
-    serverSeqNum++;
     return rc;
 }
 
@@ -445,17 +434,62 @@ int MMTLSClient::readRecord(mmtlsRecord& record) {
     int rc = 0;
     if (conn == NULL)
         return -1;
-    byteArray header(5, 0);
-    int rLen = recv(conn, (char*)header.data(), 5, 0);
-    if (rLen == -1 || rLen == 0)
-        return -1;
-    uint16 packLen = (header[3] << 8) | header[4];
-    byteArray payload(packLen, 0);
-    rLen = recv(conn, (char*)payload.data(), packLen, 0);
-    if (rLen == -1 || rLen == 0)
-        return -1;
-    header.insert(header.end(), payload.begin(), payload.end());
-    record = mmtlsRecord::readRecord(header.data(), header.data() + header.size(), rc);
+    if (!status.load()) { // 握手完成之前，包体比较小，并且不需要主动解密
+        byteArray header(5, 0);
+        int rLen = recv(conn, (char*)header.data(), 5, 0);
+        if (rLen == -1 || rLen == 0)
+            return -1;
+        uint16 packLen = (header[3] << 8) | header[4];
+        byteArray payload(packLen, 0);
+        BYTE* pBufCursor = payload.data();
+        BYTE* pBufEnd = pBufCursor + packLen;
+        while (pBufCursor < pBufEnd) {
+            int leftDataSize = (int)(pBufEnd - pBufCursor);
+            int blockSize = (leftDataSize > 0x20000) ? 0x20000 : leftDataSize;
+            rLen = recv(conn, (char*)pBufCursor, blockSize, 0);
+            if (rLen == -1 || rLen == 0)
+                return -1;
+            pBufCursor += rLen;
+        }
+        header.insert(header.end(), payload.begin(), payload.end());
+        record = mmtlsRecord::readRecord(header.data(), header.data() + header.size(), rc);
+    }
+    else {
+        uint32 recordLen = 0;
+        uint32 packetCount = 0;
+        do {
+            byteArray header(5, 0);
+            int rLen = recv(conn, (char*)header.data(), 5, 0);
+            if (rLen == -1 || rLen == 0)
+                return -1;
+            uint16 packLen = (header[3] << 8) | header[4];
+            byteArray payload(packLen, 0);
+            BYTE* pBufCursor = payload.data();
+            BYTE* pBufEnd = pBufCursor + packLen;
+            while (pBufCursor < pBufEnd) {
+                int leftDataSize = (int)(pBufEnd - pBufCursor);
+                int blockSize = (leftDataSize > 0x20000) ? 0x20000 : leftDataSize;
+                rLen = recv(conn, (char*)pBufCursor, blockSize, 0);
+                if (rLen == -1 || rLen == 0)
+                    return -1;
+                pBufCursor += rLen;
+            }
+            header.insert(header.end(), payload.begin(), payload.end());
+            mmtlsRecord tmpRecord = mmtlsRecord::readRecord(header.data(), header.data() + header.size(), rc);
+            rc = tmpRecord.decrypt(session->appKey, serverSeqNum);
+            if (rc < 0)
+                return rc;
+            serverSeqNum++;
+            BYTE* pBuf = tmpRecord.data.data();
+            if (packetCount == 0) // 在第一个数据包记录总长度
+                recordLen = (pBuf[0] << 24) | (pBuf[1] << 16) | (pBuf[2] << 8) | (pBuf[3] << 0);
+            record.recordType = tmpRecord.recordType;
+            record.version = tmpRecord.version;
+            record.length += tmpRecord.length;
+            record.data.insert(record.data.end(), tmpRecord.data.begin(), tmpRecord.data.end());
+            packetCount++;
+        } while (record.data.size() < recordLen);
+    }
     return rc;
 }
 
@@ -469,15 +503,13 @@ byteArray MMTLSClient::computeEphemeralSecret(const EC_POINT* serverPublicKey, c
     BYTE serialized[32] = { 0 };
     int sLen = BN_bn2bin(x, serialized);
     BN_free(x); BN_free(y); EC_POINT_free(point);
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     SHA256_CTX sha256;
     rc = SHA256_Init(&sha256);
     rc = SHA256_Update(&sha256, serialized, sizeof(serialized));
     rc = SHA256_Final(result.data(), &sha256);
 #else
-    // std::cout << toHexString(std::string((char*)serialized, sLen)) << std::endl;
     SHA256(serialized, sLen, result.data());
-    // std::cout << toHexString(std::string(result.begin(), result.end())) << std::endl;
 #endif
     return result;
 }
@@ -504,7 +536,7 @@ bool MMTLSClient::verifyEcdsa(const byteArray& data) {
     rc = handshakeHasher->Sum(digest);
     if (rc < 0)
         return false;
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     byteArray dataHash(SHA256_DIGEST_LENGTH, 0);
     SHA256_CTX sha256;
     rc = SHA256_Init(&sha256);
@@ -526,7 +558,7 @@ byteArray MMTLSClient::hkdfExpand(const std::string& prefix, HandshakeHasher* co
     byteArray result(prefix.begin(), prefix.end());
     if (hash != nullptr) {
         byteArray hashSum;
-        int rc = handshakeHasher->Sum(hashSum);
+        int rc = hash->Sum(hashSum);
         if (rc >= 0)
             result.insert(result.end(), hashSum.begin(), hashSum.end());
     }
@@ -535,7 +567,7 @@ byteArray MMTLSClient::hkdfExpand(const std::string& prefix, HandshakeHasher* co
 
 byteArray MMTLSClient::hmac(const byteArray& k, const byteArray& d) {
     byteArray result(SHA256_DIGEST_LENGTH, 0);
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     HMAC_CTX* ctx = HMAC_CTX_new();
     unsigned outlen = 0, ret = 0;
     ret = HMAC_Init_ex(ctx, k.data(), (unsigned)k.size(), EVP_sha256(), NULL);
@@ -554,7 +586,7 @@ byteArray MMTLSClient::hmac(const byteArray& k, const byteArray& d) {
 
 int MMTLSClient::genKeyPairs() {
     int Ret = 0;
-#if OPENSSL_API_LEVEL < 30000
+#ifndef OPENSSL3
     EC_KEY* ec_key = NULL;
     ec_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
     if (!ec_key)
