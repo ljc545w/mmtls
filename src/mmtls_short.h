@@ -2,7 +2,7 @@
 #include "session.h"
 #include "custom_defs.h"
 #include "record.h"
-#include <openssl/evp.h>
+#include "mmtls_openssl.h"
 #include <atomic>
 #include "handshakeHasher.h"
 

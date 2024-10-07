@@ -1,8 +1,7 @@
 #pragma once
 #ifndef __MMTLS_CONST__
 #define __MMTLS_CONST__
-#include <openssl/ec.h>
-#include <openssl/obj_mac.h>
+#include "mmtls_openssl.h"
 #include "custom_defs.h"
 #if !defined(_WIN32)
 #include <cstring>
@@ -21,8 +20,14 @@ constexpr uint32 TCP_NoopResponse = 0x3B9ACA06;
 constexpr int ServerEcdhCurve = NID_X9_62_prime256v1;
 constexpr char ServerEcdhX[] = "1da177b6a5ed34dabb3f2b047697ca8bbeb78c68389ced43317a298d77316d54";
 constexpr char ServerEcdhY[] = "4175c032bc573d5ce4b3ac0b7f2b9a8d48ca4b990ce2fa3ce75cc9d12720fa35";
+#ifndef OPENSSL3
 extern EC_GROUP* curve;
 extern EC_KEY* ServerEcdh;
+#else
+extern EC_GROUP* curve;
+extern const char* curveName;
+extern EVP_PKEY* ServerEcdh;
+#endif
 
 inline std::string bytesFromHex(const std::string& _Src) {
 	std::string _Out;

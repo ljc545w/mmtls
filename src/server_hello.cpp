@@ -1,5 +1,6 @@
 #include "const.h"
 #include "server_hello.h"
+#include "utility.h"
 
 serverHello serverHello::readServerHello(const byteArray& buf, int& err) {
 	err = 0;
@@ -8,7 +9,7 @@ serverHello serverHello::readServerHello(const byteArray& buf, int& err) {
 	uint32 packLen = 0;
 	packLen = (lBuf[0] << 24) | (lBuf[1] << 16) | (lBuf[2] << 8) | (lBuf[3] << 0);
 	lBuf += 4;
-	if (buf.size() != packLen + 4) {
+	if (buf.size() != (size_t)(packLen + 4)) {
 		throw std::runtime_error("data corrupted");
 	}
 	// skip flag
@@ -33,8 +34,13 @@ serverHello serverHello::readServerHello(const byteArray& buf, int& err) {
 	lBuf += 2;
 	byteArray ecPoint(lBuf, lBuf + keyLen);
 	lBuf += keyLen;
+#ifndef OPENSSL3
 	hello.publicKey = EC_KEY_new_by_curve_name(ServerEcdhCurve);
 	int rc = EC_KEY_oct2key(hello.publicKey, ecPoint.data(), ecPoint.size(), nullptr);
+#else
+	hello.publicKey = EVP_PKEY_new();
+	int rc = EVP_EC_KEY_oct2key(hello.publicKey, ecPoint.data(), ecPoint.size());
+#endif
 	if (!rc) {
 		err = -1;
 	}

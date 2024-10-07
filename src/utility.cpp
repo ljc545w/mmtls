@@ -91,3 +91,96 @@ const std::string getHostByName(const std::string& hostName) {
 	freeaddrinfo(result);
 	return host;
 }
+
+#if defined(OPENSSL3)
+int EVP_EC_KEY_oct2key(EVP_PKEY* key, const unsigned char* buf, size_t len) {
+	int rc = 0;
+	EVP_PKEY_CTX* pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+	OSSL_PARAM ossl_params[] = {
+		OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, const_cast<char*>(SN_X9_62_prime256v1), strlen(SN_X9_62_prime256v1)),
+		OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, const_cast<unsigned char*>(buf), len),
+		OSSL_PARAM_END
+	};
+	rc = EVP_PKEY_fromdata_init(pctx);
+	if (!rc)
+		goto wrapup;
+	rc = EVP_PKEY_set_type(key, EVP_PKEY_EC);
+	if (!rc)
+		goto wrapup;
+	rc = EVP_PKEY_fromdata(pctx, &key, EVP_PKEY_PUBLIC_KEY, ossl_params);
+	if (!rc)
+		goto wrapup;
+wrapup:
+	EVP_PKEY_CTX_free(pctx);
+	return rc;
+}
+
+int EVP_EC_KEY_key2buf(const EVP_PKEY* key, std::string& outData) {
+	int rc = 0;
+	OSSL_PARAM* ossl_params = nullptr;
+	rc = EVP_PKEY_todata(key, EVP_PKEY_PUBLIC_KEY, &ossl_params);
+	if (!rc)
+		return rc;
+	rc = 0;
+	OSSL_PARAM* p_cur = ossl_params;
+	while (p_cur->data) {
+		std::string szKey(p_cur->key);
+		if (szKey == OSSL_PKEY_PARAM_PUB_KEY) {
+			outData = std::string((char*)p_cur->data, p_cur->data_size);
+			rc = 1;
+			break;
+		}
+		p_cur += 1;
+	}
+	return rc;
+}
+
+int EVP_EC_KEY_get0_public_key(const EC_GROUP* curve, const EVP_PKEY* key, EC_POINT** ppEcPoint) {
+	int rc = 0;
+#if 0 // 使用枚举效率较低，并且枚举出的私钥可能无法转换为正确的BIGNUM
+	OSSL_PARAM* ossl_params = nullptr;
+	std::string szKeyBuf;
+	rc = EVP_PKEY_todata(key, EVP_PKEY_KEYPAIR, &ossl_params);
+	if (!rc)
+		return rc;
+	rc = 0;
+	OSSL_PARAM* p_cur = ossl_params;
+	while (p_cur->data) {
+		std::string szKey(p_cur->key);
+		if (szKey == OSSL_PKEY_PARAM_PUB_KEY) {
+			szKeyBuf = std::string((char*)p_cur->data, p_cur->data_size);
+			rc = 1;
+			break;
+		}
+		p_cur += 1;
+	}
+	if (!rc)
+		return rc;
+	EC_POINT* pEcPoint = EC_POINT_new(curve);
+	rc = EC_POINT_oct2point(curve, pEcPoint, (unsigned char*)szKeyBuf.data(), szKeyBuf.size(), NULL);
+	if (rc)
+		*ppEcPoint = pEcPoint;
+	else
+		EC_POINT_free(pEcPoint);
+#else
+	unsigned char buff[0x100] = { 0 };
+	size_t sLen = 0;
+	rc = EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, buff, sizeof(buff), &sLen);
+	EC_POINT* pEcPoint = EC_POINT_new(curve);
+	rc = EC_POINT_oct2point(curve, pEcPoint, buff, sLen, NULL);
+	if (rc)
+		*ppEcPoint = pEcPoint;
+	else
+		EC_POINT_free(pEcPoint);
+#endif
+	return rc;
+}
+
+int EVP_EC_KEY_get0_private_key(const EVP_PKEY* key, BIGNUM** ppBigNum) {
+	int rc = 0;
+	BIGNUM* pBigNum = nullptr;
+	rc = EVP_PKEY_get_bn_param(key, OSSL_PKEY_PARAM_PRIV_KEY, &pBigNum);
+	*ppBigNum = pBigNum;
+	return rc;
+}
+#endif

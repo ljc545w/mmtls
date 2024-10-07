@@ -18,7 +18,8 @@ int main()
 		if (err == 0)
 			client.session = &session;
 		err = client.HandShake("long.weixin.qq.com");
-		client.session->Save("session");
+		if(err >= 0)
+			client.session->Save("session");
 		if(err >= 0) 
 			err = client.Noop();
 		client.Close();

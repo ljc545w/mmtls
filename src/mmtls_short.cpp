@@ -1,12 +1,5 @@
 #include "mmtls_short.h"
 #include "utility.h"
-#include <openssl/ecdsa.h>
-#include <openssl/ecdh.h>
-#include <openssl/kdf.h>
-#include <openssl/evp.h>
-#include <openssl/obj_mac.h>
-#include <openssl/sha.h>
-#include <openssl/hmac.h>
 #include <algorithm>
 #include "signature.h"
 #include "server_finish.h"
@@ -290,15 +283,23 @@ int MMTLSClientShort::readServerFinish() {
 
 int MMTLSClientShort::readDataRecord(mmtlsRecord& record) {
 	int rc = 0;
-	record = mmtlsRecord::readRecord(packetReader, packetReaderEnd, rc);
-	if (rc < 0)
-		return rc;
-	packetReader += (5 + (size_t)record.length);
-	rc = record.decrypt(session->appKey, serverSeqNum);
-	if (rc < 0)
-		return rc;
-	serverSeqNum++;
-	LL_INFO(toHexString(std::string(record.data.begin(), record.data.end())).c_str());
+	while (true) {
+		mmtlsRecord tmpRecord = mmtlsRecord::readRecord(packetReader, packetReaderEnd, rc);
+		if (rc < 0)
+			return rc;
+		if (tmpRecord.recordType == MagicAbort)
+			break;
+		packetReader += (5 + (size_t)tmpRecord.length);
+		rc = tmpRecord.decrypt(session->appKey, serverSeqNum);
+		if (rc < 0)
+			return rc;
+		record.recordType = tmpRecord.recordType;
+		record.version = tmpRecord.version;
+		record.length += tmpRecord.length;
+		record.data.insert(record.data.end(), tmpRecord.data.begin(), tmpRecord.data.end());
+		serverSeqNum++;
+	}
+	LL_INFO("read data record finish, data size: %llu", record.data.size());
 	return rc;
 }
 
@@ -345,11 +346,18 @@ byteArray MMTLSClientShort::hkdfExpand(const std::string& prefix, const Handshak
 
 byteArray MMTLSClientShort::hmac(const byteArray& k, const byteArray& d) {
 	byteArray result(SHA256_DIGEST_LENGTH, 0);
+#ifndef OPENSSL3
 	HMAC_CTX* ctx = HMAC_CTX_new();
 	unsigned outlen = 0, ret = 0;
 	ret = HMAC_Init_ex(ctx, k.data(), (unsigned)k.size(), EVP_sha256(), NULL);
 	ret = HMAC_Update(ctx, d.data(), d.size());
 	ret = HMAC_Final(ctx, result.data(), &outlen);
 	HMAC_CTX_free(ctx);
+#else
+	unsigned int dLen = 0;
+	HMAC(EVP_sha256(), k.data(), (int)k.size(), d.data(), d.size(), result.data(), &dLen);
+	byteArray digest(result.begin(), result.begin() + dLen);
+	result = std::move(digest);
+#endif
 	return result;
 }
