@@ -4,9 +4,9 @@
 
 ### Build
 #### Windows
-在开始构建之前，需要安装OpenSSL 1.1.x版本，然后使用**Visual Studio**进行构建，注意修改**包含目录**和**库目录**。  
+在开始构建之前，需要安装OpenSSL，然后使用**Visual Studio**进行构建，注意修改**包含目录**和**库目录**。  
 #### Linux
-使用cmake进行构建：
+需要预先安装**cmake**和**libssl-dev**，然后使用cmake进行构建：
 ```shell
 cd linux
 mkdir build
