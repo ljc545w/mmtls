@@ -128,9 +128,11 @@ int MMTLSClient::HandShake(const std::string& host) {
     clientHello ch;
     serverHello sh;
 #ifndef OPENSSL3
+    EC_KEY* serverPublicECKey = nullptr;
     const EC_POINT* serverPublicKey = nullptr;
     const BIGNUM* publicEcdhPrivateKey = nullptr;
 #else
+    EVP_PKEY* serverPublicEVPKey = nullptr;
     EC_POINT* serverPublicKey = nullptr;
     BIGNUM* publicEcdhPrivateKey = nullptr;
 #endif
@@ -181,19 +183,38 @@ int MMTLSClient::HandShake(const std::string& host) {
         goto wrapup;
     }
     // DH compute key
+    if (sh.cipherSuite == (TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff)) {
+        byteArray serverPubKeySrc = sh.extensions[0x11][0];
 #ifndef OPENSSL3
-    serverPublicKey = EC_KEY_get0_public_key(sh.publicKey);
-    publicEcdhPrivateKey = EC_KEY_get0_private_key(publicEcdh);
+        serverPublicECKey = EC_KEY_new_by_curve_name(ServerEcdhCurve);
+        if (!EC_KEY_oct2key(serverPublicECKey, serverPubKeySrc.data(), serverPubKeySrc.size(), nullptr)) {
+            rc = -1;
+            goto wrapup;
+        }
+        serverPublicKey = EC_KEY_get0_public_key(serverPublicECKey);
+        publicEcdhPrivateKey = EC_KEY_get0_private_key(publicEcdh);
 #else
-    if (!EVP_EC_KEY_get0_public_key(curve, sh.publicKey, &serverPublicKey)) {
-        rc = -1;
-        goto wrapup;
-    }
-    if (!EVP_EC_KEY_get0_private_key(publicEcdh, &publicEcdhPrivateKey)) {
-        rc = -1;
-        goto wrapup;
-    }
+        serverPublicEVPKey = EVP_PKEY_new();
+        if (!EVP_EC_KEY_oct2key(serverPublicEVPKey, serverPubKeySrc.data(), serverPubKeySrc.size())) {
+            rc = -1;
+            goto wrapup;
+        }
+        if (!EVP_EC_KEY_get0_public_key(curve, sh.publicKey, &serverPublicKey)) {
+            rc = -1;
+            goto wrapup;
+        }
+        if (!EVP_EC_KEY_get0_private_key(publicEcdh, &publicEcdhPrivateKey)) {
+            rc = -1;
+            goto wrapup;
+        }
 #endif
+    }
+    else if (sh.cipherSuite == TLS_PSK_WITH_AES_128_GCM_SHA256) {
+        __debugbreak();
+    }
+    else {
+        throw std::runtime_error(("cipher(" + std::to_string(sh.cipherSuite) + ") not support").c_str());
+    }
     comKey = computeEphemeralSecret(serverPublicKey, publicEcdhPrivateKey);
     // trafffic key
     if (computeTrafficKey(comKey, hkdfExpand("handshake key expansion", handshakeHasher), trafficKey) < 0)
@@ -235,7 +256,12 @@ int MMTLSClient::HandShake(const std::string& host) {
     // fully complete handshake
     status.store(1);
 wrapup:
-#ifdef OPENSSL3
+#ifndef OPENSSL3
+    if (serverPublicECKey)
+        EC_KEY_free(serverPublicECKey);
+#else
+    if (serverPublicEVPKey)
+        EVP_PKEY_free(serverPublicEVPKey);
     if (serverPublicKey)
         EC_POINT_free(serverPublicKey);
     if (publicEcdhPrivateKey)

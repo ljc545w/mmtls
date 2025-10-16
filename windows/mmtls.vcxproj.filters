@@ -101,5 +101,8 @@
     <ClInclude Include="..\src\logger.hpp">
       <Filter>源文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\mmtls_openssl.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

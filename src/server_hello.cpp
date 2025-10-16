@@ -14,35 +14,39 @@ serverHello serverHello::readServerHello(const byteArray& buf, int& err) {
 	}
 	// skip flag
 	lBuf++;
-	hello.protocolVersion = (lBuf[0] << 8) | lBuf[1];
+	hello.protocolVersion = (lBuf[1] << 8) | lBuf[0];
 	lBuf += 2;
-	hello.cipherSuites = (lBuf[0] << 8) | lBuf[1];
+	hello.cipherSuite = (lBuf[0] << 8) | lBuf[1];
 	lBuf += 2;
-	// skip server random
+	// server random
+	hello.random = byteArray(lBuf, lBuf + 32);
 	lBuf += 32;
-	// skip exntensions package length
+	// extensions package length
+	uint32 extensionsLen = 0;
+	extensionsLen = (lBuf[0] << 24) | (lBuf[1] << 16) | (lBuf[2] << 8) | (lBuf[3] << 0);
 	lBuf += 4;
 	// skip extensions count
+	uint32 extensionCount = 0;
+	extensionCount = (uint32)lBuf[0];
 	lBuf++;
-	// skip extension package length
-	lBuf += 4;
-	// skip extension type
-	lBuf += 2;
-	// skip extension array index
-	lBuf += 4;
-	uint16 keyLen = (lBuf[0] << 8) | lBuf[1];
-	lBuf += 2;
-	byteArray ecPoint(lBuf, lBuf + keyLen);
-	lBuf += keyLen;
-#ifndef OPENSSL3
-	hello.publicKey = EC_KEY_new_by_curve_name(ServerEcdhCurve);
-	int rc = EC_KEY_oct2key(hello.publicKey, ecPoint.data(), ecPoint.size(), nullptr);
-#else
-	hello.publicKey = EVP_PKEY_new();
-	int rc = EVP_EC_KEY_oct2key(hello.publicKey, ecPoint.data(), ecPoint.size());
-#endif
-	if (!rc) {
-		err = -1;
+	for (uint32 index = 0; index < extensionCount; index++) {
+		// extension package length
+		uint32 extensionPkgLen = 0;
+		extensionPkgLen = (lBuf[0] << 24) | (lBuf[1] << 16) | (lBuf[2] << 8) | (lBuf[3] << 0);
+		lBuf += 4;
+		// extension type
+		uint16 extensionType = 0;
+		extensionType = (lBuf[0] << 8) | lBuf[1];
+		lBuf += 2;
+		// extension array index
+		uint32 extensionArrayIndex = 0;
+		extensionArrayIndex = (lBuf[0] << 24) | (lBuf[1] << 16) | (lBuf[2] << 8) | (lBuf[3] << 0);
+		lBuf += 4;
+		uint16 extensionLen = (lBuf[0] << 8) | lBuf[1];
+		lBuf += 2;
+		byteArray extension(lBuf, lBuf + extensionLen);
+		lBuf += extensionLen;
+		hello.extensions[extensionType].push_back(extension);
 	}
 	return hello;
 }

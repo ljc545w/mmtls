@@ -104,12 +104,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>D:\Program Files\OpenSSL-Win64-3.0\include;../src;$(IncludePath)</IncludePath>
+    <IncludePath>D:\Program Files\OpenSSL-Win64\include;../src;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)d</TargetName>
     <OutDir>$(SolutionDir)Bin\$(Platform)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>D:\Program Files\OpenSSL-Win64-3.0\include;../src;$(IncludePath)</IncludePath>
+    <IncludePath>D:\Program Files\OpenSSL-Win64\include;../src;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)</TargetName>
     <OutDir>$(SolutionDir)Bin\$(Platform)\</OutDir>
   </PropertyGroup>
@@ -158,8 +158,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\Program Files\OpenSSL-Win64-3.0\lib\VC\x64\MDd;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>ws2_32.lib;Crypt32.lib;libssl_static.lib;libcrypto_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Program Files\OpenSSL-Win64\lib\VC\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ws2_32.lib;Crypt32.lib;libssl64MDd.lib;libcrypto64MDd.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(SolutionDir)Bin\$(Platform)\$(TargetName)$(TargetExt)</OutputFile>
     </Link>
   </ItemDefinitionGroup>
