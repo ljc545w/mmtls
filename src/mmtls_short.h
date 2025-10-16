@@ -30,7 +30,7 @@ public:
 	int readServerFinish();
 	int readDataRecord(mmtlsRecord& record);
 	int readAbort();
-	int earlyDataKey(const byteArray& pskAccess, const sessionTicket& ticket, trafficKeyPair& pair);
+	int earlyDataKey(const byteArray& pskAccess, trafficKeyPair& pair);
 	int computeTrafficKey(const byteArray& shareKey, const byteArray& info, trafficKeyPair& pair);
 	byteArray hkdfExpand(const std::string& prefix, const HandshakeHasher* hash);
 	byteArray hmac(const byteArray& k, const byteArray& d);

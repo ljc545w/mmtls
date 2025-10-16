@@ -60,7 +60,7 @@ int MMTLSClientShort::Request(const std::string& host, const std::string& path, 
 		goto wrapup;
 	}
 	if (conn == NULL) {
-		// ´´½¨socket
+		// create socket
 		conn = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (conn == INVALID_SOCKET) {
 			rc = -1;
@@ -132,11 +132,12 @@ int MMTLSClientShort::packHttp(const std::string& host, const std::string& path,
 	rc = genDataPart(host, path, req, datPart);
 	if (rc < 0)
 		return rc;
+	// tickets[0]应该解出com_key和timestamp，用于计算pskAccess和pskRefresh并验证有效期
 	clientHello hello = clientHello::newPskZeroHello(session->tk.tickets[0]);
 	byteArray helloPart = hello.serialize();
 	handshakeHasher->Write(helloPart);
 	trafficKeyPair earlyKey;
-	rc = earlyDataKey(session->pskAccess, session->tk.tickets[0], earlyKey);
+	rc = earlyDataKey(session->pskAccess, earlyKey);
 	if (rc < 0)
 		return rc;
 	byteArray recordData = mmtlsRecord::createSystemRecord(helloPart).serialize();
@@ -317,7 +318,7 @@ int MMTLSClientShort::readAbort() {
 	return rc;
 }
 
-int MMTLSClientShort::earlyDataKey(const byteArray& pskAccess, const sessionTicket& ticket, trafficKeyPair& pair) {
+int MMTLSClientShort::earlyDataKey(const byteArray& pskAccess, trafficKeyPair& pair) {
 	int rc = 0;
 	byteArray trafficKey = ::hkdfExpand(EVP_sha256(), pskAccess, hkdfExpand("early data key expansion", handshakeHasher), 28);
 	pair.clientKey = byteArray(trafficKey.begin(), trafficKey.begin() + 16);
